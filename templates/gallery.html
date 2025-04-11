@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Your Image Gallery</h2>
+<form method="post" enctype="multipart/form-data" action="{{ url_for('upload') }}">
+    Upload Image: <input type="file" name="file">
+    <input type="submit" value="Upload">
+</form>
+<ul>
+    {% for file in files %}
+        <li><img src="{{ url_for('uploaded_file', filename=file[0]) }}" width="200"></li>
+    {% endfor %}
+</ul>
+{% endblock %}
