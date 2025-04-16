@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, send_from_directory
 import os
 import sqlite3
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__, template_folder='templates')
 app.secret_key = 'secretkey'  # Insecure, for learning only
@@ -49,33 +50,63 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    error = None
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
+        username = request.form['username'].strip()
+        email = request.form['email'].strip()
         password = request.form['password']
+
+        # Empty field check
+        if not username or not email or not password:
+            error = "All fields are required."
+            return render_template('register.html', error=error)
+
         with sqlite3.connect('database.db') as conn:
             c = conn.cursor()
+            # Check if user already exists
+            c.execute('SELECT * FROM users WHERE username=? OR email=?', (username, email))
+            existing_user = c.fetchone()
+            if existing_user:
+                error = "Username or email already exists."
+                return render_template('register.html', error=error)
+
+            # If all is good, hash password and create account
+            from werkzeug.security import generate_password_hash
+            password = generate_password_hash(password)
             c.execute('INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
                       (username, email, password))
             conn.commit()
         return redirect(url_for('login'))
     return render_template('register.html')
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    error = None
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
+
+        # Blank input check
+        if not username or not password:
+            error = "Username and password are required."
+            return render_template('login.html', error=error)
+
         with sqlite3.connect('database.db') as conn:
             c = conn.cursor()
-            c.execute('SELECT * FROM users WHERE username=? AND password=?', (username, password))
+            c.execute('SELECT * FROM users WHERE username=?', (username,))
             user = c.fetchone()
-            if user:
+
+            from werkzeug.security import check_password_hash
+            if user and check_password_hash(user[3], password):
                 session['user_id'] = user[0]
                 session['username'] = user[1]
                 session['email'] = user[2]
                 return redirect(url_for('profile'))
-    return render_template('login.html')
+            else:
+                error = "Invalid username or password."
+    return render_template('login.html', error=error)
+
 
 @app.route('/profile')
 def profile():
@@ -93,7 +124,7 @@ def change_password():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     if request.method == 'POST':
-        new_password = request.form['new_password']
+        new_password = generate_password_hash(request.form['new_password'])
         with sqlite3.connect('database.db') as conn:
             c = conn.cursor()
             c.execute('UPDATE users SET password=? WHERE id=?', (new_password, session['user_id']))
@@ -146,8 +177,4 @@ def create_post():
 
 if __name__ == '__main__':
     app.run(debug=True)
-@app.route('/')
-def index():
-    if 'user_id' in session:
-        return redirect(url_for('profile'))
-    return render_template('index.html')
+
