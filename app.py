@@ -136,16 +136,29 @@ def change_password():
 def upload():
     if 'user_id' not in session:
         return redirect(url_for('login'))
+
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
     file = request.files['file']
-    if file:
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(filepath)
-        with sqlite3.connect('database.db') as conn:
-            c = conn.cursor()
-            c.execute('INSERT INTO uploads (user_id, filename) VALUES (?, ?)',
-                      (session['user_id'], file.filename))
-            conn.commit()
-    return redirect(url_for('gallery'))
+    error = None
+
+    if not file:
+        error = "No file uploaded."
+    else:
+        filename = file.filename
+        # Check for allowed file extensions
+        if '.' not in filename or filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+            error = "Invalid file type. Only images are allowed."
+        else:
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(filepath)
+            with sqlite3.connect('database.db') as conn:
+                c = conn.cursor()
+                c.execute('INSERT INTO uploads (user_id, filename) VALUES (?, ?)',
+                          (session['user_id'], filename))
+                conn.commit()
+            return redirect(url_for('gallery'))
+
+    return render_template('profile.html', username=session['username'], email=session['email'], error=error)
 
 @app.route('/gallery')
 def gallery():
